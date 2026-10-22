@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MemScope | C Memory Visualizer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="MemScope home"><span class="brand-mark">M</span><span>MemScope</span></a>
+      <span class="status"><span class="status-dot"></span> LIVE DEMO REPORT</span>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="eyebrow">C PROGRAM INSPECTION TOOL</div>
+        <h1>See what your C program<br><span>puts in memory.</span></h1>
+        <p>Explore registered variables, their addresses, sizes, types, and values across common memory regions.</p>
+        <div class="hero-tags"><span>C11</span><span>Flask</span><span>Runtime instrumentation</span></div>
+      </section>
+
+      {% if error %}<div class="error"><strong>Could not load the demo.</strong> {{ error }}</div>{% endif %}
+
+      <section class="metrics" aria-label="Memory summary">
+        <article class="metric"><div class="metric-label">REGISTERED VARIABLES</div><div class="metric-value">{{ all_entries|length }}</div><div class="metric-note">In this demo run</div></article>
+        <article class="metric"><div class="metric-label">TOTAL REGISTERED SIZE</div><div class="metric-value">{{ total_bytes }} <small>B</small></div><div class="metric-note">Sum of registered object sizes</div></article>
+        <article class="metric"><div class="metric-label">MEMORY REGIONS</div><div class="metric-value">{{ counts.values()|select('gt', 0)|list|length }} <small>/ 3</small></div><div class="metric-note">Stack, global/data, and heap</div></article>
+      </section>
+
+      <section class="region-grid" aria-label="Memory regions">
+        {% set region_meta = {
+          'Stack': ('01', 'Function-local objects', 'Automatic storage duration'),
+          'Global/Data': ('02', 'Global and static objects', 'Static storage duration'),
+          'Heap': ('03', 'Dynamic allocation', 'Allocated with malloc')
+        } %}
+        {% for region, meta in region_meta.items() %}
+        <a class="region-card region-{{ loop.index }} {% if selected_region == region %}active{% endif %}" href="/?region={{ region|urlencode }}">
+          <div class="region-top"><span class="region-number">{{ meta[0] }}</span><span class="region-count">{{ counts[region] }} objects</span></div>
+          <h2>{{ region }}</h2><p>{{ meta[1] }}</p><div class="region-foot">{{ meta[2] }} <span>↗</span></div>
+        </a>
+        {% endfor %}
+      </section>
+
+      <section class="table-section">
+        <div class="section-heading"><div><div class="eyebrow">INSPECTION TABLE</div><h2>Variable explorer</h2></div>
+          <div class="filters" aria-label="Filter memory region">
+            {% for region in regions %}<a class="filter {% if selected_region == region %}selected{% endif %}" href="/?region={{ region|urlencode }}">{{ region }}</a>{% endfor %}
+          </div>
+        </div>
+        <div class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="Search name, type, value, or address…" autocomplete="off"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>VARIABLE</th><th>REGION</th><th>TYPE</th><th>VALUE</th><th>SIZE</th><th>ADDRESS</th></tr></thead>
+          <tbody id="variable-rows">
+          {% for entry in entries %}
+            <tr data-search="{{ (entry.name ~ ' ' ~ entry.type ~ ' ' ~ entry.value ~ ' ' ~ entry.address ~ ' ' ~ entry.region)|lower }}">
+              <td><code class="var-name">{{ entry.name }}</code></td>
+              <td><span class="region-pill pill-{{ entry.region|lower|replace('/', '')|replace(' ', '-') }}">{{ entry.region }}</span></td>
+              <td><code>{{ entry.type }}</code></td><td class="value">{{ entry.value }}</td><td>{{ entry.size_label }}</td><td><code class="address">{{ entry.address }}</code><button class="copy" data-copy="{{ entry.address }}" title="Copy address" aria-label="Copy address">⧉</button></td>
+            </tr>
+          {% else %}<tr><td colspan="6" class="empty">No variables in this region.</td></tr>{% endfor %}
+          </tbody>
+        </table></div>
+        <div class="table-footer"><span id="result-count">Showing {{ entries|length }} of {{ all_entries|length }} registered variables</span><span>Addresses change between runs</span></div>
+      </section>
+
+      <section class="note-grid">
+        <article class="note-card"><div class="note-icon">⌘</div><div><h3>Instrumentation, not guesswork</h3><p>The C program registers each object and labels its region. This avoids claiming that address values alone reveal a variable's lifetime or storage class.</p></div></article>
+        <article class="note-card"><div class="note-icon">!</div><div><h3>What the size means</h3><p>Sizes come from <code>sizeof</code>. A pointer's size is different from the size of the heap allocation it points to; MemScope reports the allocation separately.</p></div></article>
+      </section>
+      <footer>MemScope · Educational C memory inspection · Runs locally on your machine</footer>
+    </main>
+  </div>
+  <script>
+    const search = document.getElementById('search');
+    const rows = [...document.querySelectorAll('#variable-rows tr[data-search]')];
+    const count = document.getElementById('result-count');
+    const total = {{ entries|length }};
+    search.addEventListener('input', () => {
+      const query = search.value.trim().toLowerCase(); let visible = 0;
+      rows.forEach(row => { const match = row.dataset.search.includes(query); row.hidden = !match; if (match) visible++; });
+      count.textContent = `Showing ${visible} of ${total} variables in this view`;
+    });
+    document.querySelectorAll('.copy').forEach(button => button.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(button.dataset.copy); button.textContent = '✓'; setTimeout(() => button.textContent = '⧉', 900); }
+      catch { button.textContent = '—'; }
+    }));
+  </script>
+</body>
+</html>
